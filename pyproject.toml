@@ -1,0 +1,12 @@
+[project]
+name = "ytc-epub"
+version = "1.0.0"
+description = "Reproducible PDF to EPUB 3 build pipeline for YTC Price Action Trader, targeting Apple Books and WeChat Read."
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24",
+    "pillow>=10",
+]
+
+[tool.uv]
+package = false

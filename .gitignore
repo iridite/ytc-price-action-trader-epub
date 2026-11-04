@@ -1,0 +1,8 @@
+.venv/
+build/
+dist/
+tools/
+source.pdf
+__pycache__/
+*.pyc
+.DS_Store
