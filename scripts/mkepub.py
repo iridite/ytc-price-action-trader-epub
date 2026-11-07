@@ -246,7 +246,7 @@ if front:
             f.add(render(n))
 
 # ---- volumes / chapters / sections ----------------------------------------
-sec_no = 0
+sec_no = sub_no = 0
 chap_f = None
 cur_f = None
 while i < len(nodes):
@@ -265,8 +265,15 @@ while i < len(nodes):
         cur_f, chap_f = f, f
         i += 1
         continue
-    if n["k"] in ("h_sub",) and cur_f is not None and cur_f.size > FILE_LIMIT:
-        cur_f = new_file("ch", n["t"])
+    if n["k"] == "h_sub" and cur_f is not None:
+        if cur_f.size > FILE_LIMIT:
+            cur_f = new_file("ch", n["t"])
+        sub_no += 1
+        anchor = f"x{sub_no}"
+        toc.append((4, n["t"], cur_f, anchor))
+        cur_f.add(render(n, anchor))
+        i += 1
+        continue
     if n["k"] == "h_section":
         sec_no += 1
         # start a new file when the current one is getting big
@@ -393,7 +400,7 @@ def build_ncx():
            '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">',
            '<head>',
            f'<meta name="dtb:uid" content="{BOOK_ID}"/>',
-           '<meta name="dtb:depth" content="3"/>',
+           f'<meta name="dtb:depth" content="{max(lv for lv, *_ in toc)}"/>',
            '<meta name="dtb:totalPageCount" content="0"/>',
            '<meta name="dtb:maxPageNumber" content="0"/>',
            '</head>',

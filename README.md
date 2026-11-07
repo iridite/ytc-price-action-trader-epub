@@ -4,7 +4,7 @@
 
 ## 下载
 
-- 最新版 EPUB：[YTC-Price-Action-Trader.epub](https://github.com/iridite/ytc-epub/releases/latest/download/ytc-price-action-trader.epub)
+- 最新版 EPUB：[YTC-Price-Action-Trader.epub](https://github.com/iridite/ytc-price-action-trader-epub/releases/latest/download/ytc-price-action-trader.epub)
 
 ## 来源与说明
 
@@ -54,11 +54,11 @@ unzip -q /tmp/ec.zip -d tools/
 | 项目 | 值 |
 |---|---|
 | 包版本 | EPUB 3.0（EPUB 3.3 规范要求 3.x 内容的 `version` 恒为 `"3.0"`） |
-| 目录 | `nav.xhtml` + `toc.ncx` 双目录，149 条三级（卷 → 章 → 节） |
-| 文档数 | 29 个 XHTML，单文件最大 112 KB |
-| 图片 | 401 张；书内图最大约 1.2 M 像素 |
+| 目录 | `nav.xhtml` + `toc.ncx` 双目录，657 条四级（卷 → 章 → 节 → 小节） |
+| 文档数 | 30 个 XHTML（28 正文 + nav + 封面），单文件最大 115 KB |
+| 图片 | 406 张（405 张正文图 + 封面）；书内图最大约 1.2 M 像素 |
 | 字体 | 不内嵌，交给阅读器 |
-| 体积 | 13.74 MB |
+| 体积 | 13.76 MB |
 
 ## 转换时踩到并解决的坑
 
