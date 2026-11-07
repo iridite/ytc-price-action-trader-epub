@@ -1,6 +1,6 @@
 # YTC Price Action Trader → EPUB 3 转换报告
 
-产物：`dist/YTC Price Action Trader.epub`（13.1 MB，29 个正文文档，149 条目录，401 张图 + 8 页图表已拆成文字与图形）
+产物：`dist/YTC Price Action Trader.epub`（13.1 MB，28 个正文文档，149 条目录，405 张正文图 + 8 页图表已拆成文字与图形）
 
 ## 1. 结论
 
