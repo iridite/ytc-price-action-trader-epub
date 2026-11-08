@@ -440,9 +440,22 @@ def main():
     _doc = pymupdf.open(os.path.join(ROOT, "source.pdf"))
     _best = max(_doc[0].get_image_info(xrefs=True), key=lambda i: i["width"] * i["height"])
     _info = _doc.extract_image(_best["xref"])
-    with open(os.path.join(src, "EPUB", "media", "cover.jpg"), "wb") as fh:
-        fh.write(_info["image"])
-
+    # WeChat Read shelf uses 128:185 (~0.692) aspect ratio. Raw cover (492x636, ~0.774)
+    # is wider than the shelf card, causing WeChat to center-crop the sides.
+    # Pad top and bottom with native header/footer background colors to prevent any cropping.
+    from PIL import Image
+    import io
+    _raw_cov = Image.open(io.BytesIO(_info["image"]))
+    _tw, _th = _raw_cov.width, int(round(_raw_cov.width / (128 / 185))) # 492 x 711
+    _pad_top = (_th - _raw_cov.height) // 2
+    _top_c = _raw_cov.getpixel((_raw_cov.width // 2, 0))
+    _bot_c = _raw_cov.getpixel((_raw_cov.width // 2, _raw_cov.height - 1))
+    _padded_cov = Image.new("RGB", (_tw, _th), _top_c)
+    _padded_cov.paste(_raw_cov, (0, _pad_top))
+    _bot_rect = Image.new("RGB", (_tw, _th - _raw_cov.height - _pad_top), _bot_c)
+    _padded_cov.paste(_bot_rect, (0, _pad_top + _raw_cov.height))
+    _padded_cov.save(os.path.join(src, "EPUB", "media", "cover.jpg"), quality=95)
+    _cov_w, _cov_h = _tw, _th
     used = set()
     for f in files:
         used.update(re.findall(r"\.\./media/([\w.\-]+)", "".join(f.body)))
@@ -455,7 +468,7 @@ def main():
               XHTML_HEAD.format(lang=LANG, title=esc(f.title)) + "\n".join(f.body) + "\n" + XHTML_TAIL)
     write(os.path.join(src, "EPUB", "text", "cover.xhtml"),
           XHTML_HEAD.format(lang=LANG, title=esc(TITLE)).replace("<body>", '<body class="coverpage">') +
-          '<div class="cover"><img src="../media/cover.jpg" alt="Cover" width="492" height="636"/></div>\n' +
+          f'<div class="cover"><img src="../media/cover.jpg" alt="Cover" width="{_cov_w}" height="{_cov_h}"/></div>\n' +
           XHTML_TAIL)
 
     # opf
