@@ -82,3 +82,18 @@ cd ~/Documents/ytc-epub
 ```
 
 `build/flow.py` 会把逐页解析结果缓存到 `build/raw_pages.json`，调排版规则时不必重跑 PDF 解析（`--force` 强制重算）。
+
+## 8. 笔记迁移记录（2026-11-08）
+
+这本书换过三个 `bookId`，笔记逐次迁移，每次都做全量核对：
+
+| 代 | bookId | 状态 |
+|---|---|---|
+| A | `CB_3e60aA0Y71zX77T75D75DGkW` | 已清空（45 划线 + 30 想法全删） |
+| B | `CB_4VbGQhGQn27l77R75DDqHBWv` | 已清空（4 划线 + 2 想法全删） |
+| C | `CB_GWC0bM0cE0Se77Y75D75DArw78J` | 当前在架，45 划线 + 30 想法 |
+
+- 重新导入不复用 `bookId`；`chapterUid` 由包内文件与切分边界决定，实测 A→C 的 31 章 1:1 映射成功。
+- `range` 原样复用即可，前提是新包正文文字未变：本次除新增 72 个锚点 `id` 外正文逐字节相同，42 条可定位划线的文本偏移差全为 0。
+- 核对判据：按 `(chapterUid, range)` 比对 `markText` 与想法的 `content`，45/45 与 30/30 全一致。
+- 工具：`~/Documents/weread-ytc-notes/migrate.py`（同一份也收在 foundry 的 `Skills/weread-note-migration/`）；原始响应与导出落在同目录。
