@@ -76,15 +76,35 @@ def is_bullet_line(l):
 
 def get_lines(page):
     out = []
+    pending = None
     for b in page.get_text("dict")["blocks"]:
         if b["type"] != 0:
             continue
         for l in b["lines"]:
             if not [s for s in l["spans"] if s["text"].strip()]:
                 continue
-            out.append({"bbox": [round(v, 2) for v in l["bbox"]],
-                        "spans": [{"t": s["text"], "f": s["font"], "s": round(s["size"], 2),
-                                   "bb": [round(v, 2) for v in s["bbox"]]} for s in l["spans"]]})
+            spans = [{"t": s["text"], "f": s["font"], "s": round(s["size"], 2),
+                      "bb": [round(v, 2) for v in s["bbox"]]} for s in l["spans"]]
+            if pending:
+                spans[0]["t"] = pending + " " + spans[0]["t"].lstrip()
+                pending = None
+            # A heading and body text sharing one baseline (Cambria then Times):
+            # split, and push the body fragment onto the next line so it does not
+            # end up inside the heading.
+            cut = next((i + 1 for i in range(len(spans) - 1)
+                        if "Cambria" in canon_font(spans[i]["f"])
+                        and "Cambria" not in canon_font(spans[i + 1]["f"])
+                        and spans[i + 1]["t"].strip()), None)
+            if cut:
+                pending = "".join(s["t"] for s in spans[cut:]).strip()
+                spans = spans[:cut]
+            bb = [min(s["bb"][0] for s in spans), min(s["bb"][1] for s in spans),
+                  max(s["bb"][2] for s in spans), max(s["bb"][3] for s in spans)]
+            out.append({"bbox": [round(v, 2) for v in bb], "spans": spans})
+    if pending and out:
+        out.append({"bbox": [39.0, out[-1]["bbox"][1] + 13.8, 300.0, out[-1]["bbox"][3] + 13.8],
+                    "spans": [{"t": pending, "f": "Times-Roman", "s": 12.0,
+                               "bb": [39.0, out[-1]["bbox"][1] + 13.8, 300.0, out[-1]["bbox"][3] + 13.8]}]})
     # a bullet glyph drawn as its own text run: fold it into the item text
     bullets = [l for l in out if is_bullet_line(l)]
     if bullets:
