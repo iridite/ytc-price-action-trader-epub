@@ -192,8 +192,10 @@ def render(n, anchor=None):
         alt = esc(n.get("cap") or "")
         wh = f' width="{n["w"]}" height="{n["h"]}"'
         if n.get("cap"):
+            # caption as a block-level <p>: renderers that ignore figcaption
+            # (WeChat Read's own HTML tree) otherwise run it into the image.
             return (f'<figure class="fig"><img src="../media/{img}" alt="{alt}"{wh}/>'
-                    f'<figcaption>{alt}</figcaption></figure>')
+                    f'<p class="figcap">{alt}</p></figure>')
         return f'<figure class="fig"><img src="../media/{img}" alt=""{wh}/></figure>'
     if k == "timg":
         img = esc(n["src"])
@@ -247,6 +249,7 @@ if front:
 
 # ---- volumes / chapters / sections ----------------------------------------
 sec_no = 0
+sub_no = 0
 chap_f = None
 cur_f = None
 while i < len(nodes):
@@ -278,6 +281,16 @@ while i < len(nodes):
         anchor = f"s{sec_no}"
         toc.append((3, n["t"], cur_f, anchor))
         cur_f.add(render(n, anchor))
+        i += 1
+        continue
+    if n["k"] == "h_sub":
+        if re.match(r"^\d+\.\d+\.\d+", (n.get("t") or "").strip()):
+            sub_no += 1
+            anchor = f"x{sub_no}"
+            toc.append((4, n["t"], cur_f, anchor))
+            cur_f.add(render(n, anchor))
+        else:
+            cur_f.add(render(n))
         i += 1
         continue
     if cur_f is None:
@@ -393,7 +406,7 @@ def build_ncx():
            '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">',
            '<head>',
            f'<meta name="dtb:uid" content="{BOOK_ID}"/>',
-           '<meta name="dtb:depth" content="3"/>',
+           f'<meta name="dtb:depth" content="{max(lv for lv, *_ in toc)}"/>',
            '<meta name="dtb:totalPageCount" content="0"/>',
            '<meta name="dtb:maxPageNumber" content="0"/>',
            '</head>',

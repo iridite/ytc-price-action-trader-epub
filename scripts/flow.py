@@ -105,7 +105,24 @@ def get_lines(page):
             tgt["bbox"][0] = min(tgt["bbox"][0], b["bbox"][0])
         out = keep
     out.sort(key=lambda l: (round(l["bbox"][1], 1), l["bbox"][0]))
-    return out
+    # Nitro exports justified paragraphs as one block per word: fold fragments
+    # that share a baseline back into a single line before run grouping.
+    folded = []
+    for l in out:
+        if folded:
+            p = folded[-1]
+            gap = l["bbox"][0] - p["bbox"][2]
+            if abs(l["bbox"][1] - p["bbox"][1]) < 4 and -2 <= gap <= 80:
+                head = l["spans"][0]["t"][:1]
+                prev = p["spans"][-1]["t"]
+                if prev and not prev.endswith((" ", "-")) and head not in (" ", ",", ".", ";", ":", "!", "?", ")", "\u201d", "\u2019"):
+                    l["spans"][0]["t"] = " " + l["spans"][0]["t"]
+                p["spans"].extend(l["spans"])
+                p["bbox"][2] = max(p["bbox"][2], l["bbox"][2])
+                p["bbox"][3] = max(p["bbox"][3], l["bbox"][3])
+                continue
+        folded.append(l)
+    return folded
 
 def line_props(l):
     sz = max(s["s"] for s in l["spans"])
@@ -226,7 +243,12 @@ def starts_list_item(l):
     return t.startswith("\u2022") or bool(LIST_MARK.match(t))
 
 def build_runs(lines):
-    """Group consecutive lines into style-consistent, vertically contiguous runs."""
+    """Group consecutive lines into vertically contiguous runs.
+
+    Lines join when the style matches, or when the previous line ends mid-sentence
+    and this one continues it - a justified line whose tail word is entirely bold
+    or italic ("... Swing High or" / "Low.") changes the majority-vote emphasis
+    without starting a new paragraph."""
     runs = []
     for l in lines:
         sig = style_sig(l)
@@ -235,9 +257,18 @@ def build_runs(lines):
             sz = max(sig[0], r["sig"][0])
             pitch = l["bbox"][1] - r["lines"][-1]["bbox"][1]
             prev_txt = "".join(x["t"] for x in r["lines"][-1]["spans"]).rstrip()
-            cont = (r["sig"] == sig
-                    and 0 < pitch < max(1.75 * sz, 18)
-                    and l["bbox"][0] > r["x0"] - 5)
+            cur_txt = "".join(x["t"] for x in l["spans"]).lstrip()
+            pitch_ok = -2 < pitch < max(1.75 * sz, 18)
+            x_ok = l["bbox"][0] > r["x0"] - 5
+            unfinished = bool(prev_txt) and prev_txt[-1] not in '.!?:;"\u201d\u2019)]}\u2014\u2013\u2026'
+            short_emph = len(cur_txt) <= 24 and sig[1] in ("b", "i", "bi")
+            continues = cur_txt[:1].islower() or short_emph
+            same_size = abs(sig[0] - r["sig"][0]) < 0.4
+            # A line that continues the previous sentence needs no indent test:
+            # continuation lines legitimately start left of the run's first line.
+            # A size change means a heading or a different block, never a wrap.
+            cont = pitch_ok and ((r["sig"] == sig and x_ok)
+                                 or (unfinished and continues and same_size))
             if cont and starts_list_item(l):
                 cont = False
             if cont:
@@ -375,8 +406,9 @@ def main():
             b_is_first = firstn and firstn[-1] is b
             at = strip_tags(a["html"]).rstrip()
             bt = strip_tags(b["html"]).lstrip()
-            if a_is_last and b_is_first and bt and bt[0].islower() and \
-                    (at[-1] in ",-;\u2013" or a["x1"] > 492) and abs(a["x0"] - b["x0"]) < 3:
+            if a_is_last and b_is_first and bt and bt[0].islower() and at and \
+                    at[-1] not in '.!?:;"\u201d\u2019)]}\u2014\u2013\u2026' and \
+                    abs(a["x0"] - b["x0"]) < 3:
                 sep = "" if at.endswith("-") else " "
                 a["html"] = a["html"].rstrip() + sep + b["html"].lstrip()
                 a["txt"] = at + sep + bt
