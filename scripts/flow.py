@@ -124,7 +124,17 @@ def get_lines(page):
             sp["t"] = "\u2022 " + sp["t"]
             tgt["bbox"][0] = min(tgt["bbox"][0], b["bbox"][0])
         out = keep
-    out.sort(key=lambda l: (round(l["bbox"][1], 1), l["bbox"][0]))
+    # Group spans within 4pt vertically onto the same baseline before sorting left-to-right,
+    # otherwise 0.5pt ascent jitter reorders inline chunks (e.g. "– Body Relaxation & Mind").
+    out.sort(key=lambda l: (l["bbox"][1], l["bbox"][0]))
+    by_y, base_y = [], None
+    for l in out:
+        if base_y is None or abs(l["bbox"][1] - base_y) >= 4:
+            by_y.append([l])
+            base_y = l["bbox"][1]
+        else:
+            by_y[-1].append(l)
+    out = [l for row in by_y for l in sorted(row, key=lambda r: r["bbox"][0])]
     # Nitro exports justified paragraphs as one block per word: fold fragments
     # that share a baseline back into a single line before run grouping.
     folded = []
@@ -189,11 +199,18 @@ def heading_kind(st, fonts, txt):
         return "h_chapter" if re.match(r"^Chapter\s+", t, re.I) else "h_section"
     if 13.2 <= sz < 20 and em in ("b", "bi") and fam == "cambria":
         return "h_section"
+    # Some 2-part section headings (e.g. 10.4) were typeset at 12.95pt instead of 14pt.
+    if 12.5 <= sz < 20 and em in ("b", "bi") and fam == "cambria" \
+            and re.match(r"^\d+\.\d+(?!\.\d)(?:\s*[-\u2013\u2014]|\s+[A-Z])", t):
+        return "h_section"
     if abs(sz - 12.95) < 0.25 and em in ("b", "bi") and fam == "cambria":
         return None if re.match(r"^Volume\b", t, re.I) else "h_sub"
     if 11.5 <= sz <= 12.6 and em in ("b", "bi") and fam == "cambria":
         return "h_sub"
     if 11.5 <= sz <= 12.6 and em == "i" and len(t) < 90 and t[-1] not in ".,;:":
+        # Exclude parenthetical remarks and wrapped continuation lines from headings.
+        if t.startswith(("(", "-", "\u2013", "\u2014")) or (t.endswith(")") and "(" not in t):
+            return None
         return "h_sub"
     if 9.3 <= sz <= 10.4 and em == "b" and len(t) < 60:
         return "h_small"
@@ -305,7 +322,7 @@ def page_nodes(pno):
         b = pymupdf.Rect(inf["bbox"])
         if b.y0 > PH - 2 or b.y1 < 2 or b.y0 < -2:
             continue
-        if b.width < 100 or b.height < 70:
+        if b.width < 100 or b.height < 30:
             continue
         rasters.append((b, inf["xref"]))
     rasters.sort(key=lambda x: (x[0].y0, x[0].x0))
@@ -372,7 +389,7 @@ def page_nodes(pno):
         if CAP_RE.match(txt) and bb0[0] > 80 and len(txt) < 300:
             out.append({"k": "cap", "t": txt, "p": pno + 1, "y": bb0[1]})
             continue
-        hk = heading_kind(r["sig"], set(), txt)
+        hk = None if starts_list_item(r["lines"][0]) else heading_kind(r["sig"], set(), txt)
         if hk:
             out.append({"k": hk, "t": txt, "p": pno + 1, "y": bb0[1], "x": r["x0"], "size": sz})
             continue

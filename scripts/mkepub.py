@@ -20,7 +20,7 @@ TITLE = "YTC Price Action Trader"
 SUBTITLE = "Intraday Swing Trading for the Forex, FX Futures and Emini Futures Markets"
 CREATOR = "Lance Beggs"
 LANG = "en"
-FILE_LIMIT = 110_000          # bytes of XHTML per file
+FILE_LIMIT = 80_100           # bytes of XHTML per file (safely below WeChat Read's ~100KB split limit)
 
 SMALL_WORDS = {"a", "an", "and", "as", "at", "but", "by", "for", "in", "of", "on",
                "or", "the", "to", "vs", "with", "within", "from", "into"}
@@ -169,13 +169,26 @@ for n in nodes:
 nodes = grouped
 
 # --------------------------------------------------------------- structure
+XHTML_HEAD = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="{lang}" xml:lang="{lang}">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<link rel="stylesheet" type="text/css" href="../css/style.css"/>
+</head>
+<body>
+"""
+XHTML_TAIL = "</body>\n</html>\n"
+
 class File:
     def __init__(self, fid, name, title):
         self.id, self.name, self.title = fid, name, title
-        self.body, self.size = [], 0
+        self.body = []
+        self.size = len(XHTML_HEAD.format(lang=LANG, title=esc(title)).encode()) + len(XHTML_TAIL.encode())
     def add(self, html):
         self.body.append(html)
-        self.size += len(html.encode())
+        self.size += len(html.encode()) + 1
 
 files, toc = [], []      # toc: (level, title, file, anchor)
 
@@ -252,6 +265,58 @@ sec_no = 0
 sub_no = 0
 chap_f = None
 cur_f = None
+NUM_SEC_RE = re.compile(r"^\d+\.\d+(?!\.\d)\b")
+NUM_SUB_RE = re.compile(r"^\d+\.\d+\.\d+")
+
+def emit_chapter(chap_nodes):
+    global sec_no, sub_no
+    head = chap_nodes[0]
+    # Segment chapter into atomic TOC-anchored units so we can look ahead before
+    # exceeding FILE_LIMIT and only ever split at a real nav entry (never mid-section).
+    units = [{"title": head["t"], "items": [(None, None, None, render(head))], "only_sec_head": False, "is_sec": False}]
+    for m in chap_nodes[1:]:
+        t = (m.get("t") or "").strip()
+        if m["k"] == "h_section" and NUM_SEC_RE.match(t):
+            sec_no += 1
+            anchor = f"s{sec_no}"
+            units.append({"title": m["t"], "items": [(3, anchor, m["t"], render(m, anchor))], "only_sec_head": True, "is_sec": True})
+        elif m["k"] == "h_sub" and NUM_SUB_RE.match(t):
+            sub_no += 1
+            anchor = f"x{sub_no}"
+            if units[-1]["only_sec_head"]:
+                # Keep an immediately following x.y.z subsection attached to its parent h_section.
+                units[-1]["items"].append((4, anchor, m["t"], render(m, anchor)))
+                units[-1]["only_sec_head"] = False
+            else:
+                units.append({"title": m["t"], "items": [(4, anchor, m["t"], render(m, anchor))], "only_sec_head": False, "is_sec": False})
+        else:
+            units[-1]["items"].append((None, None, None, render(m)))
+            units[-1]["only_sec_head"] = False
+
+    def unit_bytes(u):
+        return sum(len(html.encode()) + 1 for _, _, _, html in u["items"])
+
+    f = new_file("ch", head["t"])
+    toc.append((2, head["t"], f, None))
+    for idx_u, u in enumerate(units):
+        need = unit_bytes(u)
+        if u["is_sec"]:
+            # If the whole section fits in one file, avoid stranding its intro in the previous file.
+            j_u = idx_u + 1
+            sec_total = need
+            while j_u < len(units) and not units[j_u]["is_sec"]:
+                sec_total += unit_bytes(units[j_u])
+                j_u += 1
+            if sec_total + 400 <= FILE_LIMIT:
+                need = sec_total
+        if len(f.body) > 1 and f.size + need > FILE_LIMIT:
+            f = new_file("ch", u["title"])
+        for lv, anchor, title, html in u["items"]:
+            if lv is not None:
+                toc.append((lv, title, f, anchor))
+            f.add(html)
+    return f
+
 while i < len(nodes):
     n = nodes[i]
     if n["k"] == "h_part":
@@ -262,36 +327,11 @@ while i < len(nodes):
         i += 1
         continue
     if n["k"] == "h_chapter":
-        f = new_file("ch", n["t"])
-        toc.append((2, n["t"], f, None))
-        f.add(f'<h1 class="chap">{esc(n["t"])}</h1>')
-        cur_f, chap_f = f, f
-        i += 1
-        continue
-    if n["k"] in ("h_sub",) and cur_f is not None and cur_f.size > FILE_LIMIT:
-        cur_f = new_file("ch", n["t"])
-    if n["k"] == "h_section":
-        sec_no += 1
-        # start a new file when the current one is getting big
-        if cur_f is None:
-            cur_f = new_file("ch", n["t"])
-            toc.append((2, n["t"], cur_f, None))
-        if cur_f.size > FILE_LIMIT:
-            cur_f = new_file("ch", n["t"])
-        anchor = f"s{sec_no}"
-        toc.append((3, n["t"], cur_f, anchor))
-        cur_f.add(render(n, anchor))
-        i += 1
-        continue
-    if n["k"] == "h_sub":
-        if re.match(r"^\d+\.\d+\.\d+", (n.get("t") or "").strip()):
-            sub_no += 1
-            anchor = f"x{sub_no}"
-            toc.append((4, n["t"], cur_f, anchor))
-            cur_f.add(render(n, anchor))
-        else:
-            cur_f.add(render(n))
-        i += 1
+        j = i + 1
+        while j < len(nodes) and nodes[j]["k"] not in ("h_part", "h_chapter"):
+            j += 1
+        cur_f = chap_f = emit_chapter(nodes[i:j])
+        i = j
         continue
     if cur_f is None:
         cur_f = new_file("ch", n.get("t", TITLE))
@@ -304,18 +344,6 @@ def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-
-XHTML_HEAD = """<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="{lang}" xml:lang="{lang}">
-<head>
-<meta charset="utf-8"/>
-<title>{title}</title>
-<link rel="stylesheet" type="text/css" href="../css/style.css"/>
-</head>
-<body>
-"""
-XHTML_TAIL = "</body>\n</html>\n"
 
 CSS = """@charset "utf-8";
 html, body { margin: 0; padding: 0; }

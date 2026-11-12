@@ -4,7 +4,7 @@
 
 ## 下载
 
-- 最新版 EPUB：[YTC-Price-Action-Trader.epub](https://github.com/iridite/ytc-epub/releases/latest/download/ytc-price-action-trader.epub)
+- 最新版 EPUB：[YTC-Price-Action-Trader.epub](https://github.com/iridite/ytc-price-action-trader-epub/releases/latest/download/ytc-price-action-trader.epub)
 
 ## 来源与说明
 
@@ -54,11 +54,11 @@ unzip -q /tmp/ec.zip -d tools/
 | 项目 | 值 |
 |---|---|
 | 包版本 | EPUB 3.0（EPUB 3.3 规范要求 3.x 内容的 `version` 恒为 `"3.0"`） |
-| 目录 | `nav.xhtml` + `toc.ncx` 双目录，221 条四级（卷 → 章 → 节 → 带 `x.y.z` 编号的小节） |
-| 文档数 | 30 个 XHTML（28 个正文 + 目录 + 封面），单文件最大 112 KB |
-| 图片 | 406 个媒体文件（405 张正文图 + 封面），书内图最大约 1.2 M 像素 |
+| 目录 | `nav.xhtml` + `toc.ncx` 双目录，185 条四级（卷 → 章 → 编号节 → 带 `x.y.z` 编号的小节） |
+| 文档数 | 32 个 XHTML（30 个正文 + 目录 + 封面），单文件最大 80,006 B（≤80 KB） |
+| 图片 | 407 个媒体文件（406 张正文图 + 封面），书内图最大约 1.2 M 像素 |
 | 字体 | 不内嵌，交给阅读器 |
-| 体积 | 13.74 MB |
+| 体积 | 13.18 MB |
 
 ## 转换时踩到并解决的坑
 
@@ -77,4 +77,4 @@ Apple Books 有完整官方规范（[Apple Books Asset Guide 5.3.1](https://help
 
 - 544 等表单位保留为整页图片：那是空白待填模板，重排没有意义。
 - 原 PDF 第 3–8 页目录的页码本身是错的（每卷从 15 重新计数），已丢弃并重建目录。
-- 内置封面沿用 PDF 内嵌的 492×636 原生图，短边低于 Apple 对「营销封面」建议的 1400px；该图本身上限如此，放大无意义。
+- 内置封面源于 PDF 内嵌的 492×636 原生图（上下补底色至 492×711 以适配微信读书 128:185 书架比例），短边低于 Apple 对「营销封面」建议的 1400px；该图本身上限如此，放大无意义。
