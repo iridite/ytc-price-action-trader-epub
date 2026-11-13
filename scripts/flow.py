@@ -270,7 +270,16 @@ def style_sig(l):
     fam = "cambria" if any("Cambria" in canon_font(s["f"]) for s in l["spans"]) else "times"
     return (round(sz, 1), em, fam)
 
-LIST_MARK = re.compile(r"^(?:[a-hA-H]|[ivxIVX]{1,4}|\d{1,3})[\)\.]\s")
+LIST_MARK = re.compile(
+    r"^(?:"
+    r"[a-zA-Z][\)\.]|"             # a) b. A) B.
+    r"\([a-zA-Z]\)|"              # (a) (b) (A)
+    r"\d{1,3}[\)\.]|"             # 1) 2. 12)
+    r"\(\d{1,3}\)|"               # (1) (2) (12)
+    r"[ivxIVX]{1,4}[\)\.]|"       # i) ii. iv) VI)
+    r"\([ivxIVX]{1,4}\)"          # (i) (ii) (iv)
+    r")\s"
+)
 
 def starts_list_item(l):
     sp = l["spans"][0]
@@ -338,6 +347,23 @@ def page_nodes(pno):
             if not WM.match(fix("".join(s["t"] for s in l["spans"])).replace(" ", ""))
             and not covered_by(l["bbox"])
             and fix("".join(s["t"] for s in l["spans"])).strip()]
+
+    # Fold small raster bullet icons (<=10x10 px, e.g. 6x6 square ■ bullets exported by Nitro)
+    # into the following text line on the same baseline as a bullet item.
+    b_imgs = [pymupdf.Rect(inf["bbox"]) for inf in page.get_image_info(xrefs=True)
+              if inf["width"] <= 10 and inf["height"] <= 10 and 2 < inf["bbox"][1] < PH - 10
+              and not covered_by(inf["bbox"])]
+    for bi in b_imgs:
+        bi_mid = (bi.y0 + bi.y1) / 2
+        same = [l for l in keep if l["bbox"][1] - 3 <= bi_mid <= l["bbox"][3] + 1 and l["bbox"][0] > bi.x0 - 2]
+        if same:
+            tgt = min(same, key=lambda l: (l["bbox"][1], l["bbox"][0]))
+        else:
+            below = [l for l in keep if 0 < l["bbox"][1] - bi.y0 < 22 and l["bbox"][0] > bi.x0 - 2]
+            tgt = min(below, key=lambda l: l["bbox"][1]) if below else None
+        if tgt and not tgt["spans"][0]["t"].startswith("\u2022 "):
+            tgt["spans"][0]["t"] = "\u2022 " + tgt["spans"][0]["t"]
+            tgt["bbox"][0] = min(tgt["bbox"][0], bi.x0)
 
     # split at figures: keep runs from flowing across a figure
     figitems = [{"k": "fig", "y": b.y0, "src": ("raster", xref)} for b, xref in rasters] + \

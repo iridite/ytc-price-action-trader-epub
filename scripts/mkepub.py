@@ -96,6 +96,16 @@ for n in nodes:
 nodes = fixed
 
 # (b) a sentence broken into several paragraph objects by the original layout
+LIST_MARK = re.compile(
+    r"^(?:"
+    r"[a-zA-Z][\)\.]|"             # a) b. A) B.
+    r"\([a-zA-Z]\)|"              # (a) (b) (A)
+    r"\d{1,3}[\)\.]|"             # 1) 2. 12)
+    r"\(\d{1,3}\)|"               # (1) (2) (12)
+    r"[ivxIVX]{1,4}[\)\.]|"       # i) ii. iv) VI)
+    r"\([ivxIVX]{1,4}\)"          # (i) (ii) (iv)
+    r")\s"
+)
 TERM = ".!?:;\u201d\u2019)\u2026"
 merged_any = True
 rounds = 0
@@ -110,7 +120,8 @@ while merged_any and rounds < 3:
         if (a["k"] == "p" and b is not None and b["k"] == "p"
                 and a.get("p") == b.get("p")
                 and abs(a.get("x0", 0) - b.get("x0", 0)) < 10
-                and not b.get("txt", "").lstrip().startswith("\u2022")):
+                and not b.get("txt", "").lstrip().startswith("\u2022")
+                and not LIST_MARK.match(b.get("txt", "").lstrip())):
             at = a["txt"].rstrip()
             bt = b["txt"].lstrip()
             joinable = False
@@ -363,6 +374,8 @@ p { margin: 0 0 0.75em 0; text-indent: 0; }
 p.i1 { margin-left: 1.1em; }
 p.i2 { margin-left: 2.2em; }
 p.i3 { margin-left: 3.3em; }
+ul.b { margin: 0 0 0.75em 0; padding-left: 1.5em; }
+ul.b li { margin: 0.25em 0; }
 figure.fig { margin: 1.1em 0; padding: 0; text-align: center; page-break-inside: avoid; break-inside: avoid; }
 figure.fig img { max-width: 100%; height: auto; }
 figure.fig figcaption { font-size: 0.86em; font-style: italic; text-align: center;
