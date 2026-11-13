@@ -332,16 +332,15 @@ def emit_chapter(chap_nodes):
     toc.append((2, head["t"], f, None))
     for idx_u, u in enumerate(units):
         need = unit_bytes(u)
-        if u["is_sec"]:
-            # If the whole section fits in one file, avoid stranding its intro in the previous file.
-            j_u = idx_u + 1
-            sec_total = need
-            while j_u < len(units) and not units[j_u]["is_sec"]:
-                sec_total += unit_bytes(units[j_u])
-                j_u += 1
-            if sec_total + 400 <= FILE_LIMIT:
-                need = sec_total
-        if len(f.body) > 1 and f.size + need > FILE_LIMIT:
+        # Always split at every new h_section (x.y) to prevent WeChat Read TOC slip.
+        should_split = False
+        if idx_u > 0 and u["is_sec"]:
+            if idx_u > 1 or len(f.body) > 2:
+                should_split = True
+        elif len(f.body) > 1 and f.size + need > FILE_LIMIT:
+            should_split = True
+
+        if should_split:
             f = new_file("ch", u["title"])
         for lv, anchor, title, html in u["items"]:
             if lv is not None:
