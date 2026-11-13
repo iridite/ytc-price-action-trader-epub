@@ -17,7 +17,7 @@ SKIP_PAGES = {1} | set(range(3, 9))     # cover page + printed table of contents
 
 TXT_MAP = {
     "\u201e": "\u2018", "\u201f": "\u2019",
-    "\uf0b7": "\u2022", "\uf0a7": "\u2022", "\uf04a": "\u2022",
+    "\uf0b7": "\u2022", "\uf0a7": "\u2022", "\uf04a": ":)",
     "\uf020": " ", "\u00a0": " ", "\u00ad": "",
 }
 def fix(t):
@@ -31,15 +31,27 @@ def esc(t):
     return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 # ---------------------------------------------------------------- clustering
+def is_callout_box(d, total_drawings):
+    # Single 0.72pt stroked outline rectangles around body text callout notes (e.g. p.85, p.195)
+    return (d.get("fill") is None
+            and round(d.get("width") or 0, 2) == 0.72
+            and total_drawings <= 6
+            and d["rect"].width >= 80 and d["rect"].height >= 22)
+
 def find_clusters(pno, tol=8.0):
     page = doc[pno]
+    drawings = [d for d in page.get_drawings() if 5 < d["rect"].y0 < PH - 10]
     boxes = []
-    for d in page.get_drawings():
+    for d in drawings:
+        if is_callout_box(d, len(drawings)):
+            continue
         r = pymupdf.Rect(d["rect"]) & PAGE
         if r.is_empty or (r.width < 0.5 and r.height < 0.5):
             continue
         boxes.append(r)
     n = len(boxes)
+    if n == 0:
+        return []
     par = list(range(n))
     def find(a):
         while par[a] != a:
@@ -72,7 +84,7 @@ def is_bullet_line(l):
     if not all(canon_font(sp["f"]) in BULLET_FONTS for sp in l["spans"]):
         return False
     t = "".join(sp["t"] for sp in l["spans"]).strip()
-    return 0 < len(t) <= 2
+    return t in ("o", "\uf0b7", "\uf0a7", "\u2022")
 
 def get_lines(page):
     out = []
@@ -343,6 +355,9 @@ def page_nodes(pno):
         cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
         return any(c.x0 - 2 <= cx <= c.x1 + 2 and c.y0 - 2 <= cy <= c.y1 + 2 for c in covered)
 
+    page_drw = [d for d in page.get_drawings() if 5 < d["rect"].y0 < PH - 10]
+    callout_rects = [d["rect"] for d in page_drw if is_callout_box(d, len(page_drw))]
+
     keep = [l for l in lines
             if not WM.match(fix("".join(s["t"] for s in l["spans"])).replace(" ", ""))
             and not covered_by(l["bbox"])
@@ -382,6 +397,9 @@ def page_nodes(pno):
         cur.append(l)
     if cur:
         segments.append(cur)
+    while fi < len(figitems):
+        segments.append([figitems[fi]])
+        fi += 1
 
     runs = []
     for seg in segments:
@@ -416,8 +434,12 @@ def page_nodes(pno):
             out.append({"k": "cap", "t": txt, "p": pno + 1, "y": bb0[1]})
             continue
         hk = None if starts_list_item(r["lines"][0]) else heading_kind(r["sig"], set(), txt)
+        in_c = any(c.contains(pymupdf.Point((bb0[0] + max(l["bbox"][2] for l in r["lines"])) / 2, (bb0[1] + max(l["bbox"][3] for l in r["lines"])) / 2)) for c in callout_rects)
         if hk:
-            out.append({"k": hk, "t": txt, "p": pno + 1, "y": bb0[1], "x": r["x0"], "size": sz})
+            node = {"k": hk, "t": txt, "p": pno + 1, "y": bb0[1], "x": r["x0"], "size": sz}
+            if in_c:
+                node["callout"] = True
+            out.append(node)
             continue
         html_parts = []
         for i, l in enumerate(r["lines"]):
@@ -425,9 +447,12 @@ def page_nodes(pno):
                 prevtxt = "".join(s["t"] for s in r["lines"][i - 1]["spans"]).rstrip()
                 html_parts.append("" if prevtxt.endswith("-") else " ")
             html_parts.append(inline_html(l["spans"]))
-        out.append({"k": "p", "html": "".join(html_parts), "txt": txt,
-                    "x0": r["x0"], "x1": max(l["bbox"][2] for l in r["lines"]),
-                    "p": pno + 1, "y": bb0[1], "size": sz})
+        node = {"k": "p", "html": "".join(html_parts), "txt": txt,
+                "x0": r["x0"], "x1": max(l["bbox"][2] for l in r["lines"]),
+                "p": pno + 1, "y": bb0[1], "size": sz}
+        if in_c:
+            node["callout"] = True
+        out.append(node)
     return out
 
 def strip_tags(h):

@@ -167,17 +167,35 @@ for n in nodes:
 nodes = out
 
 # ---- group bullet paragraphs into lists -----------------------------------
+def strip_bullet(html):
+    # Strip leading • whether before or inside leading opening tag(s) like <strong>• or <em>•
+    h = re.sub(r'^\s*\u2022\s*', '', html)
+    h = re.sub(r'^((?:<[a-z0-9]+[^>]*>\s*)+)\u2022\s*', r'\1', h)
+    h = re.sub(r'<([a-z0-9]+)[^>]*>\s*</\1>', '', h)
+    return h.strip()
+
 grouped = []
 for n in nodes:
     if n["k"] == "p" and n.get("txt", "").lstrip().startswith("\u2022"):
-        body = re.sub(r'^\s*\u2022\s*', '', n["html"])
+        body = strip_bullet(n["html"])
         if grouped and grouped[-1]["k"] == "ul":
             grouped[-1]["items"].append(body)
         else:
-            grouped.append({"k": "ul", "items": [body], "p": n["p"]})
+            grouped.append({"k": "ul", "items": [body], "p": n["p"], "callout": n.get("callout", False)})
         continue
     grouped.append(n)
-nodes = grouped
+
+# ---- group callout nodes into boxes ---------------------------------------
+grouped_co = []
+for n in grouped:
+    if n.get("callout") and n["k"] not in ("h_part", "h_chapter"):
+        if grouped_co and grouped_co[-1]["k"] == "callout":
+            grouped_co[-1]["items"].append(n)
+        else:
+            grouped_co.append({"k": "callout", "items": [n], "p": n.get("p", 0)})
+    else:
+        grouped_co.append(n)
+nodes = grouped_co
 
 # --------------------------------------------------------------- structure
 XHTML_HEAD = """<?xml version="1.0" encoding="utf-8"?>
@@ -211,6 +229,9 @@ def new_file(prefix, title):
 
 def render(n, anchor=None):
     k = n["k"]
+    if k == "callout":
+        body = "\n".join(render(x) for x in n["items"])
+        return f'<div class="callout">\n{body}\n</div>'
     if k == "fig":
         img = esc(n["src"])
         alt = esc(n.get("cap") or "")
@@ -376,6 +397,12 @@ p.i2 { margin-left: 2.2em; }
 p.i3 { margin-left: 3.3em; }
 ul.b { margin: 0 0 0.75em 0; padding-left: 1.5em; }
 ul.b li { margin: 0.25em 0; }
+div.callout { margin: 1.2em 0; padding: 0.8em 1.1em; border: 1px solid #c8c8c8; border-radius: 4px; }
+div.callout p { margin: 0 0 0.5em 0; }
+div.callout p:last-child { margin-bottom: 0; }
+div.callout ul.b { margin: 0 0 0.5em 0; }
+div.callout ul.b:last-child { margin-bottom: 0; }
+div.callout h2, div.callout h3, div.callout h4 { margin-top: 0.2em; margin-bottom: 0.4em; font-size: 1.15em; }
 figure.fig { margin: 1.1em 0; padding: 0; text-align: center; page-break-inside: avoid; break-inside: avoid; }
 figure.fig img { max-width: 100%; height: auto; }
 figure.fig figcaption { font-size: 0.86em; font-style: italic; text-align: center;
