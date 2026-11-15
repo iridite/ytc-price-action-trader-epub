@@ -315,12 +315,7 @@ def emit_chapter(chap_nodes):
         elif m["k"] == "h_sub" and NUM_SUB_RE.match(t):
             sub_no += 1
             anchor = f"x{sub_no}"
-            if units[-1]["only_sec_head"]:
-                # Keep an immediately following x.y.z subsection attached to its parent h_section.
-                units[-1]["items"].append((4, anchor, m["t"], render(m, anchor)))
-                units[-1]["only_sec_head"] = False
-            else:
-                units.append({"title": m["t"], "items": [(4, anchor, m["t"], render(m, anchor))], "only_sec_head": False, "is_sec": False})
+            units.append({"title": m["t"], "items": [(4, anchor, m["t"], render(m, anchor))], "only_sec_head": False, "is_sec": False})
         else:
             units[-1]["items"].append((None, None, None, render(m)))
             units[-1]["only_sec_head"] = False
@@ -332,12 +327,12 @@ def emit_chapter(chap_nodes):
     toc.append((2, head["t"], f, None))
     for idx_u, u in enumerate(units):
         need = unit_bytes(u)
-        # Always split at every new h_section (x.y) to prevent WeChat Read TOC slip.
-        should_split = False
-        if idx_u > 0 and u["is_sec"]:
-            if idx_u > 1 or len(f.body) > 2:
-                should_split = True
-        elif len(f.body) > 1 and f.size + need > FILE_LIMIT:
+        # WeChat Read 的 chapterUid 以文件为单位,文件内的 nav 锚点无法反查页码,
+        # 目录定位会滑到该文件最末条目之后。因此每个目录项独占一个 XHTML 文件,
+        # 所有锚点都落在各自文件偏移 0 处,不依赖平台做文件内插值。
+        should_split = idx_u > 0
+        # 兜底:任何单个单元都不得越过平台 ~100KB 的二次切分线。
+        if not should_split and len(f.body) > 1 and f.size + need > FILE_LIMIT:
             should_split = True
 
         if should_split:
