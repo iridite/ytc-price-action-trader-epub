@@ -610,9 +610,23 @@ def main():
                 z.write(p, rel, compress_type=ct)
     print("files:", len(files), "media:", len(used), "toc:", len(toc))
     print("epub:", out_path, round(os.path.getsize(out_path) / 1048576, 2), "MB")
-    big = [f for f in files if f.size > FILE_LIMIT * 1.25]
-    if big:
-        print("!! oversized files:", [(f.name, f.size) for f in big])
+
+    # ---- 结构不变式(硬失败,不允许静默产出镜像文件) ----
+    # 微信读书按 spine 文件生成 chapterUid;文件内锚点无法反查页码,会让目录定位滑脱。
+    # 因此每个目录项必须独占一个文件,且锚点必须在文件正文开头。
+    per_file = {}
+    for lv, title, f, anchor in toc:
+        per_file.setdefault(id(f), []).append((title, anchor))
+    shared = [(f.name, [t for t, _ in per_file[id(f)]]) for f in files if len(per_file.get(id(f), [])) > 1]
+    assert not shared, f"一个文件承载多条目录项，微信读书目录会滑脱: {shared}"
+    orphan = [f.name for f in files if not per_file.get(id(f))]
+    assert not orphan, f"正文文件没有对应目录项: {orphan}"
+    for lv, title, f, anchor in toc:
+        if anchor:
+            pos = "".join(f.body).find(f'id="{anchor}"')
+            assert 0 <= pos < 2000, f"锚点不在文件开头: {f.name} {title!r} @{pos}"
+    over = [(f.name, f.size) for f in files if f.size > FILE_LIMIT]
+    assert not over, f"超过平台 ~100 KB 二次切分阈值: {over}"
 
 BOOK_ID = "urn:uuid:" + str(uuid.uuid5(uuid.NAMESPACE_URL, "ytc-price-action-trader/" + CREATOR))
 
